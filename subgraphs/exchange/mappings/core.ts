@@ -3,7 +3,7 @@ import { BigInt, BigDecimal, store } from "@graphprotocol/graph-ts";
 import {
   Pair,
   Token,
-  PancakeFactory,
+  YokaiFactory,
   Transaction,
   Mint as MintEvent,
   Burn as BurnEvent,
@@ -11,8 +11,13 @@ import {
   Bundle,
 } from "../generated/schema";
 import { Mint, Burn, Swap, Transfer, Sync } from "../generated/templates/Pair/Pair";
-import { updatePairDayData, updateTokenDayData, updatePancakeDayData, updatePairHourData } from "./dayUpdates";
-import { getBnbPriceInUSD, findBnbPerToken, getTrackedVolumeUSD, getTrackedLiquidityUSD } from "./pricing";
+import { updatePairDayData, updateTokenDayData, updateYokaiDayData, updatePairHourData } from "./dayUpdates";
+import {
+  getNativeTokenPriceInUSD,
+  findNativeTokenPerToken,
+  getTrackedVolumeUSD,
+  getTrackedLiquidityUSD,
+} from "./pricing";
 import { convertTokenToDecimal, ADDRESS_ZERO, FACTORY_ADDRESS, ONE_BI, ZERO_BD, BI_18 } from "./utils";
 
 function isCompleteMint(mintId: string): boolean {
@@ -60,6 +65,8 @@ export function handleTransfer(event: Transfer): void {
       mint.liquidity = value;
       mint.timestamp = transaction.timestamp;
       mint.transaction = transaction.id;
+      mint.token0 = pair.token0;
+      mint.token1 = pair.token1;
       mint.save();
 
       // update mints in transaction
@@ -70,7 +77,7 @@ export function handleTransfer(event: Transfer): void {
     }
   }
 
-  // case where direct send first on BNB withdrawals
+  // case where direct send first on Native Token withdrawals
   if (event.params.to.toHex() == pair.id) {
     let burns = transaction.burns;
     let burn = new BurnEvent(
@@ -84,6 +91,8 @@ export function handleTransfer(event: Transfer): void {
     burn.sender = event.params.from;
     burn.needsComplete = true;
     burn.transaction = transaction.id;
+    burn.token0 = pair.token0;
+    burn.token1 = pair.token1;
     burn.save();
 
     // TODO: Consider using .concat() for handling array updates to protect
@@ -115,6 +124,8 @@ export function handleTransfer(event: Transfer): void {
         burn.liquidity = value;
         burn.transaction = transaction.id;
         burn.timestamp = transaction.timestamp;
+        burn.token0 = pair.token0;
+        burn.token1 = pair.token1;
       }
     } else {
       burn = new BurnEvent(event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString()));
@@ -124,6 +135,8 @@ export function handleTransfer(event: Transfer): void {
       burn.liquidity = value;
       burn.transaction = transaction.id;
       burn.timestamp = transaction.timestamp;
+      burn.token0 = pair.token0;
+      burn.token1 = pair.token1;
     }
 
     // if this logical burn included a fee mint, account for this
@@ -165,10 +178,10 @@ export function handleSync(event: Sync): void {
   let pair = Pair.load(event.address.toHex());
   let token0 = Token.load(pair.token0);
   let token1 = Token.load(pair.token1);
-  let pancake = PancakeFactory.load(FACTORY_ADDRESS);
+  let factory = YokaiFactory.load(FACTORY_ADDRESS);
 
   // reset factory liquidity by subtracting only tracked liquidity
-  pancake.totalLiquidityBNB = pancake.totalLiquidityBNB.minus(pair.trackedReserveBNB as BigDecimal);
+  factory.totalLiquidityNative = factory.totalLiquidityNative.minus(pair.trackedReserveNative as BigDecimal);
 
   // reset token total liquidity amounts
   token0.totalLiquidity = token0.totalLiquidity.minus(pair.reserve0);
@@ -183,43 +196,43 @@ export function handleSync(event: Sync): void {
   else pair.token1Price = ZERO_BD;
 
   let bundle = Bundle.load("1");
-  bundle.bnbPrice = getBnbPriceInUSD();
+  bundle.nativeTokenPrice = getNativeTokenPriceInUSD();
   bundle.save();
 
-  let t0DerivedBNB = findBnbPerToken(token0 as Token);
-  token0.derivedBNB = t0DerivedBNB;
-  token0.derivedUSD = t0DerivedBNB.times(bundle.bnbPrice);
+  let t0DerivedNative = findNativeTokenPerToken(token0 as Token);
+  token0.derivedNative = t0DerivedNative;
+  token0.derivedUSD = t0DerivedNative.times(bundle.nativeTokenPrice);
   token0.save();
 
-  let t1DerivedBNB = findBnbPerToken(token1 as Token);
-  token1.derivedBNB = t1DerivedBNB;
-  token1.derivedUSD = t1DerivedBNB.times(bundle.bnbPrice);
+  let t1DerivedNative = findNativeTokenPerToken(token1 as Token);
+  token1.derivedNative = t1DerivedNative;
+  token1.derivedUSD = t1DerivedNative.times(bundle.nativeTokenPrice);
   token1.save();
 
   // get tracked liquidity - will be 0 if neither is in whitelist
-  let trackedLiquidityBNB: BigDecimal;
-  if (bundle.bnbPrice.notEqual(ZERO_BD)) {
-    trackedLiquidityBNB = getTrackedLiquidityUSD(
+  let trackedLiquidityNative: BigDecimal;
+  if (bundle.nativeTokenPrice.notEqual(ZERO_BD)) {
+    trackedLiquidityNative = getTrackedLiquidityUSD(
       bundle as Bundle,
       pair.reserve0,
       token0 as Token,
       pair.reserve1,
       token1 as Token
-    ).div(bundle.bnbPrice);
+    ).div(bundle.nativeTokenPrice);
   } else {
-    trackedLiquidityBNB = ZERO_BD;
+    trackedLiquidityNative = ZERO_BD;
   }
 
   // use derived amounts within pair
-  pair.trackedReserveBNB = trackedLiquidityBNB;
-  pair.reserveBNB = pair.reserve0
-    .times(token0.derivedBNB as BigDecimal)
-    .plus(pair.reserve1.times(token1.derivedBNB as BigDecimal));
-  pair.reserveUSD = pair.reserveBNB.times(bundle.bnbPrice);
+  pair.trackedReserveNative = trackedLiquidityNative;
+  pair.reserveNative = pair.reserve0
+    .times(token0.derivedNative as BigDecimal)
+    .plus(pair.reserve1.times(token1.derivedNative as BigDecimal));
+  pair.reserveUSD = pair.reserveNative.times(bundle.nativeTokenPrice);
 
   // use tracked amounts globally
-  pancake.totalLiquidityBNB = pancake.totalLiquidityBNB.plus(trackedLiquidityBNB);
-  pancake.totalLiquidityUSD = pancake.totalLiquidityBNB.times(bundle.bnbPrice);
+  factory.totalLiquidityNative = factory.totalLiquidityNative.plus(trackedLiquidityNative);
+  factory.totalLiquidityUSD = factory.totalLiquidityNative.times(bundle.nativeTokenPrice);
 
   // now correctly set liquidity amounts for each token
   token0.totalLiquidity = token0.totalLiquidity.plus(pair.reserve0);
@@ -227,7 +240,7 @@ export function handleSync(event: Sync): void {
 
   // save entities
   pair.save();
-  pancake.save();
+  factory.save();
   token0.save();
   token1.save();
 }
@@ -238,7 +251,7 @@ export function handleMint(event: Mint): void {
   let mint = MintEvent.load(mints[mints.length - 1]);
 
   let pair = Pair.load(event.address.toHex());
-  let pancake = PancakeFactory.load(FACTORY_ADDRESS);
+  let factory = YokaiFactory.load(FACTORY_ADDRESS);
 
   let token0 = Token.load(pair.token0);
   let token1 = Token.load(pair.token1);
@@ -251,22 +264,22 @@ export function handleMint(event: Mint): void {
   token0.totalTransactions = token0.totalTransactions.plus(ONE_BI);
   token1.totalTransactions = token1.totalTransactions.plus(ONE_BI);
 
-  // get new amounts of USD and BNB for tracking
+  // get new amounts of USD and Native for tracking
   let bundle = Bundle.load("1");
-  let amountTotalUSD = token1.derivedBNB
+  let amountTotalUSD = token1.derivedNative
     .times(token1Amount)
-    .plus(token0.derivedBNB.times(token0Amount))
-    .times(bundle.bnbPrice);
+    .plus(token0.derivedNative.times(token0Amount))
+    .times(bundle.nativeTokenPrice);
 
   // update txn counts
   pair.totalTransactions = pair.totalTransactions.plus(ONE_BI);
-  pancake.totalTransactions = pancake.totalTransactions.plus(ONE_BI);
+  factory.totalTransactions = factory.totalTransactions.plus(ONE_BI);
 
   // save entities
   token0.save();
   token1.save();
   pair.save();
-  pancake.save();
+  factory.save();
 
   mint.sender = event.params.sender;
   mint.amount0 = token0Amount as BigDecimal;
@@ -277,7 +290,7 @@ export function handleMint(event: Mint): void {
 
   updatePairDayData(event);
   updatePairHourData(event);
-  updatePancakeDayData(event);
+  updateYokaiDayData(event);
   updateTokenDayData(token0 as Token, event);
   updateTokenDayData(token1 as Token, event);
 }
@@ -292,7 +305,7 @@ export function handleBurn(event: Burn): void {
   let burn = BurnEvent.load(burns[burns.length - 1]);
 
   let pair = Pair.load(event.address.toHex());
-  let pancake = PancakeFactory.load(FACTORY_ADDRESS);
+  let factory = YokaiFactory.load(FACTORY_ADDRESS);
 
   //update token info
   let token0 = Token.load(pair.token0);
@@ -304,22 +317,22 @@ export function handleBurn(event: Burn): void {
   token0.totalTransactions = token0.totalTransactions.plus(ONE_BI);
   token1.totalTransactions = token1.totalTransactions.plus(ONE_BI);
 
-  // get new amounts of USD and BNB for tracking
+  // get new amounts of USD and Native for tracking
   let bundle = Bundle.load("1");
-  let amountTotalUSD = token1.derivedBNB
+  let amountTotalUSD = token1.derivedNative
     .times(token1Amount)
-    .plus(token0.derivedBNB.times(token0Amount))
-    .times(bundle.bnbPrice);
+    .plus(token0.derivedNative.times(token0Amount))
+    .times(bundle.nativeTokenPrice);
 
   // update txn counts
-  pancake.totalTransactions = pancake.totalTransactions.plus(ONE_BI);
+  factory.totalTransactions = factory.totalTransactions.plus(ONE_BI);
   pair.totalTransactions = pair.totalTransactions.plus(ONE_BI);
 
   // update global counter and save
   token0.save();
   token1.save();
   pair.save();
-  pancake.save();
+  factory.save();
 
   // update burn
   // burn.sender = event.params.sender
@@ -332,7 +345,7 @@ export function handleBurn(event: Burn): void {
 
   updatePairDayData(event);
   updatePairHourData(event);
-  updatePancakeDayData(event);
+  updateYokaiDayData(event);
   updateTokenDayData(token0 as Token, event);
   updateTokenDayData(token1 as Token, event);
 }
@@ -350,15 +363,15 @@ export function handleSwap(event: Swap): void {
   let amount0Total = amount0Out.plus(amount0In);
   let amount1Total = amount1Out.plus(amount1In);
 
-  // BNB/USD prices
+  // Native/USD prices
   let bundle = Bundle.load("1");
 
-  // get total amounts of derived USD and BNB for tracking
-  let derivedAmountBNB = token1.derivedBNB
+  // get total amounts of derived USD and Native for tracking
+  let derivedAmountNative = token1.derivedNative
     .times(amount1Total)
-    .plus(token0.derivedBNB.times(amount0Total))
+    .plus(token0.derivedNative.times(amount0Total))
     .div(BigDecimal.fromString("2"));
-  let derivedAmountUSD = derivedAmountBNB.times(bundle.bnbPrice);
+  let derivedAmountUSD = derivedAmountNative.times(bundle.nativeTokenPrice);
 
   // only accounts for volume through white listed tokens
   let trackedAmountUSD = getTrackedVolumeUSD(
@@ -369,11 +382,11 @@ export function handleSwap(event: Swap): void {
     token1 as Token
   );
 
-  let trackedAmountBNB: BigDecimal;
-  if (bundle.bnbPrice.equals(ZERO_BD)) {
-    trackedAmountBNB = ZERO_BD;
+  let trackedAmountNative: BigDecimal;
+  if (bundle.nativeTokenPrice.equals(ZERO_BD)) {
+    trackedAmountNative = ZERO_BD;
   } else {
-    trackedAmountBNB = trackedAmountUSD.div(bundle.bnbPrice);
+    trackedAmountNative = trackedAmountUSD.div(bundle.nativeTokenPrice);
   }
 
   // update token0 global volume and token liquidity stats
@@ -399,17 +412,17 @@ export function handleSwap(event: Swap): void {
   pair.save();
 
   // update global values, only used tracked amounts for volume
-  let pancake = PancakeFactory.load(FACTORY_ADDRESS);
-  pancake.totalVolumeUSD = pancake.totalVolumeUSD.plus(trackedAmountUSD);
-  pancake.totalVolumeBNB = pancake.totalVolumeBNB.plus(trackedAmountBNB);
-  pancake.untrackedVolumeUSD = pancake.untrackedVolumeUSD.plus(derivedAmountUSD);
-  pancake.totalTransactions = pancake.totalTransactions.plus(ONE_BI);
+  let factory = YokaiFactory.load(FACTORY_ADDRESS);
+  factory.totalVolumeUSD = factory.totalVolumeUSD.plus(trackedAmountUSD);
+  factory.totalVolumeNative = factory.totalVolumeNative.plus(trackedAmountNative);
+  factory.untrackedVolumeUSD = factory.untrackedVolumeUSD.plus(derivedAmountUSD);
+  factory.totalTransactions = factory.totalTransactions.plus(ONE_BI);
 
   // save entities
   pair.save();
   token0.save();
   token1.save();
-  pancake.save();
+  factory.save();
 
   let transaction = Transaction.load(event.transaction.hash.toHex());
   if (transaction === null) {
@@ -438,6 +451,8 @@ export function handleSwap(event: Swap): void {
   swap.logIndex = event.logIndex;
   // use the tracked amount if we have it
   swap.amountUSD = trackedAmountUSD === ZERO_BD ? derivedAmountUSD : trackedAmountUSD;
+  swap.token0 = pair.token0;
+  swap.token1 = pair.token1;
   swap.save();
 
   // update the transaction
@@ -451,15 +466,15 @@ export function handleSwap(event: Swap): void {
   // update day entities
   let pairDayData = updatePairDayData(event);
   let pairHourData = updatePairHourData(event);
-  let pancakeDayData = updatePancakeDayData(event);
+  let yokaiDayData = updateYokaiDayData(event);
   let token0DayData = updateTokenDayData(token0 as Token, event);
   let token1DayData = updateTokenDayData(token1 as Token, event);
 
   // swap specific updating
-  pancakeDayData.dailyVolumeUSD = pancakeDayData.dailyVolumeUSD.plus(trackedAmountUSD);
-  pancakeDayData.dailyVolumeBNB = pancakeDayData.dailyVolumeBNB.plus(trackedAmountBNB);
-  pancakeDayData.dailyVolumeUntracked = pancakeDayData.dailyVolumeUntracked.plus(derivedAmountUSD);
-  pancakeDayData.save();
+  yokaiDayData.dailyVolumeUSD = yokaiDayData.dailyVolumeUSD.plus(trackedAmountUSD);
+  yokaiDayData.dailyVolumeNative = yokaiDayData.dailyVolumeNative.plus(trackedAmountNative);
+  yokaiDayData.dailyVolumeUntracked = yokaiDayData.dailyVolumeUntracked.plus(derivedAmountUSD);
+  yokaiDayData.save();
 
   // swap specific updating for pair
   pairDayData.dailyVolumeToken0 = pairDayData.dailyVolumeToken0.plus(amount0Total);
@@ -475,17 +490,21 @@ export function handleSwap(event: Swap): void {
 
   // swap specific updating for token0
   token0DayData.dailyVolumeToken = token0DayData.dailyVolumeToken.plus(amount0Total);
-  token0DayData.dailyVolumeBNB = token0DayData.dailyVolumeBNB.plus(amount0Total.times(token0.derivedBNB as BigDecimal));
+  token0DayData.dailyVolumeNative = token0DayData.dailyVolumeNative.plus(
+    amount0Total.times(token0.derivedNative as BigDecimal)
+  );
   token0DayData.dailyVolumeUSD = token0DayData.dailyVolumeUSD.plus(
-    amount0Total.times(token0.derivedBNB as BigDecimal).times(bundle.bnbPrice)
+    amount0Total.times(token0.derivedNative as BigDecimal).times(bundle.nativeTokenPrice)
   );
   token0DayData.save();
 
   // swap specific updating
   token1DayData.dailyVolumeToken = token1DayData.dailyVolumeToken.plus(amount1Total);
-  token1DayData.dailyVolumeBNB = token1DayData.dailyVolumeBNB.plus(amount1Total.times(token1.derivedBNB as BigDecimal));
+  token1DayData.dailyVolumeNative = token1DayData.dailyVolumeNative.plus(
+    amount1Total.times(token1.derivedNative as BigDecimal)
+  );
   token1DayData.dailyVolumeUSD = token1DayData.dailyVolumeUSD.plus(
-    amount1Total.times(token1.derivedBNB as BigDecimal).times(bundle.bnbPrice)
+    amount1Total.times(token1.derivedNative as BigDecimal).times(bundle.nativeTokenPrice)
   );
   token1DayData.save();
 }

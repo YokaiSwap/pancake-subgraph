@@ -1,12 +1,10 @@
 /* eslint-disable prefer-const */
-import { BigInt, BigDecimal, Address } from "@graphprotocol/graph-ts";
+import { BigInt, BigDecimal, Address, TypedMap } from "@graphprotocol/graph-ts";
 import { ERC20 } from "../../generated/Factory/ERC20";
-import { ERC20NameBytes } from "../../generated/Factory/ERC20NameBytes";
-import { ERC20SymbolBytes } from "../../generated/Factory/ERC20SymbolBytes";
 import { Factory as FactoryContract } from "../../generated/templates/Pair/Factory";
 
 export let ADDRESS_ZERO = "0x0000000000000000000000000000000000000000";
-export let FACTORY_ADDRESS = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+export let FACTORY_ADDRESS = "0x5ef0d2d41a5f3d5a083bc776f94282667c27b794";
 
 export let ZERO_BI = BigInt.fromI32(0);
 export let ONE_BI = BigInt.fromI32(1);
@@ -31,54 +29,44 @@ export function convertTokenToDecimal(tokenAmount: BigInt, exchangeDecimals: Big
   return tokenAmount.toBigDecimal().div(exponentToBigDecimal(exchangeDecimals));
 }
 
-export function isNullBnbValue(value: string): boolean {
-  return value == "0x0000000000000000000000000000000000000000000000000000000000000001";
-}
-
 export function fetchTokenSymbol(tokenAddress: Address): string {
   let contract = ERC20.bind(tokenAddress);
-  let contractSymbolBytes = ERC20SymbolBytes.bind(tokenAddress);
 
-  let symbolValue = "unknown";
   let symbolResult = contract.try_symbol();
-  if (symbolResult.reverted) {
-    let symbolResultBytes = contractSymbolBytes.try_symbol();
-    if (!symbolResultBytes.reverted) {
-      if (!isNullBnbValue(symbolResultBytes.value.toHex())) {
-        symbolValue = symbolResultBytes.value.toString();
-      }
-    }
-  } else {
-    symbolValue = symbolResult.value;
+  if (!symbolResult.reverted) {
+    return symbolResult.value;
   }
-  return symbolValue;
+
+  return "unknown";
 }
 
 export function fetchTokenName(tokenAddress: Address): string {
   let contract = ERC20.bind(tokenAddress);
-  let contractNameBytes = ERC20NameBytes.bind(tokenAddress);
-
-  let nameValue = "unknown";
   let nameResult = contract.try_name();
-  if (nameResult.reverted) {
-    let nameResultBytes = contractNameBytes.try_name();
-    if (!nameResultBytes.reverted) {
-      if (!isNullBnbValue(nameResultBytes.value.toHex())) {
-        nameValue = nameResultBytes.value.toString();
-      }
-    }
-  } else {
-    nameValue = nameResult.value;
+  if (!nameResult.reverted) {
+    return nameResult.value;
   }
-  return nameValue;
+
+  return "unknown";
 }
 
+export let predefinedDecimalsByAddress = new TypedMap<string, BigInt>();
+predefinedDecimalsByAddress.set("0xe934f463d026d97f6ce0a10215d0ac4224f0a930", BigInt.fromI32(8)); // WCKB
+predefinedDecimalsByAddress.set("0x53a1964a163f64da59efe6a802e35b5529d078e2", BigInt.fromI32(8)); // dCKB
+predefinedDecimalsByAddress.set("0xf4187511d43b90751a28b6811d13afb49bef8452", BigInt.fromI32(8)); // TAI
+
 export function fetchTokenDecimals(tokenAddress: Address): BigInt {
+  let predefinedDecimals = predefinedDecimalsByAddress.get(tokenAddress.toHex());
+  if (predefinedDecimals != null) {
+    return predefinedDecimals as BigInt;
+  }
+
   let contract = ERC20.bind(tokenAddress);
-  let decimalValue = null;
+
   let decimalResult = contract.try_decimals();
   if (!decimalResult.reverted) {
-    decimalValue = decimalResult.value;
+    return BigInt.fromI32(decimalResult.value);
   }
-  return BigInt.fromI32(decimalValue as i32);
+
+  return BigInt.fromI32(18);
 }

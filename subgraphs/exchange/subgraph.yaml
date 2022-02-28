@@ -1,16 +1,16 @@
 specVersion: 0.0.2
-description: PancakeSwap is a decentralized protocol for automated token exchange on Binance Smart Chain.
-repository: https://github.com/pancakeswap
+description: YokaiSwap is a decentralized protocol for automated token exchange on Nervos Godwoken Polyjuice Chain.
+repository: https://github.com/yokaiswap
 schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum/contract
     name: Factory
-    network: bsc
+    network: gwmainnet
     source:
-      address: '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73'
+      address: '0x5EF0d2d41a5F3D5a083Bc776F94282667C27b794'
       abi: Factory
-      startBlock: 6809737
+      startBlock: 40698
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.4
@@ -24,17 +24,13 @@ dataSources:
           file: ./abis/Factory.json
         - name: ERC20
           file: ./abis/ERC20.json
-        - name: ERC20NameBytes
-          file: ./abis/ERC20NameBytes.json
-        - name: ERC20SymbolBytes
-          file: ./abis/ERC20SymbolBytes.json
       eventHandlers:
         - event: PairCreated(indexed address,indexed address,address,uint256)
           handler: handlePairCreated
 templates:
   - kind: ethereum/contract
     name: Pair
-    network: bsc
+    network: gwmainnet
     source:
       abi: Pair
     mapping:

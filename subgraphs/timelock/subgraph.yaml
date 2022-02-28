@@ -1,12 +1,12 @@
 specVersion: 0.0.2
-description: PancakeSwap Timelock
-repository: https://github.com/pancakeswap
+description: YokaiSwap Timelock
+repository: https://github.com/yokaiswap
 schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum/contract
     name: Timelock
-    network: bsc
+    network: gwtestnet
     source:
       address: '0xA1f482Dc58145Ba2210bC21878Ca34000E2e8fE4'
       abi: Timelock

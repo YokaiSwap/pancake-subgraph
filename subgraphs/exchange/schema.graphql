@@ -1,4 +1,4 @@
-type PancakeFactory @entity {
+type YokaiFactory @entity {
   id: ID!
 
   "Total of pairs"
@@ -9,21 +9,21 @@ type PancakeFactory @entity {
 
   # total volume
   totalVolumeUSD: BigDecimal!
-  totalVolumeBNB: BigDecimal!
+  totalVolumeNative: BigDecimal!
 
   # untracked values - less confident USD scores
   untrackedVolumeUSD: BigDecimal!
 
   # total liquidity
   totalLiquidityUSD: BigDecimal!
-  totalLiquidityBNB: BigDecimal!
+  totalLiquidityNative: BigDecimal!
 }
 
 type Bundle @entity {
   id: ID!
 
-  "BNB price, in USD"
-  bnbPrice: BigDecimal!
+  "Native token price, in USD"
+  nativeTokenPrice: BigDecimal!
 }
 
 type Token @entity {
@@ -48,7 +48,7 @@ type Token @entity {
   totalLiquidity: BigDecimal!
 
   # derived prices
-  derivedBNB: BigDecimal
+  derivedNative: BigDecimal
   derivedUSD: BigDecimal
 
   # derived fields
@@ -72,9 +72,9 @@ type Pair @entity {
   totalSupply: BigDecimal!
 
   # derived liquidity
-  reserveBNB: BigDecimal!
+  reserveNative: BigDecimal!
   reserveUSD: BigDecimal!
-  trackedReserveBNB: BigDecimal! # used for separating per pair reserves and global
+  trackedReserveNative: BigDecimal! # used for separating per pair reserves and global
   # Price in terms of the asset pair
   token0Price: BigDecimal!
   token1Price: BigDecimal!
@@ -130,6 +130,9 @@ type Mint @entity {
   # optional fee fields, if a Transfer event is fired in _mintFee
   feeTo: Bytes
   feeLiquidity: BigDecimal
+
+  token0: Token!
+  token1: Token!
 }
 
 type Burn @entity {
@@ -151,12 +154,15 @@ type Burn @entity {
   # derived amount based on available prices of tokens
   amountUSD: BigDecimal
 
-  # mark uncomplete in BNB case
+  # mark uncomplete in Native Token case
   needsComplete: Boolean!
 
   # optional fee fields, if a Transfer event is fired in _mintFee
   feeTo: Bytes
   feeLiquidity: BigDecimal
+
+  token0: Token!
+  token1: Token!
 }
 
 type Swap @entity {
@@ -178,19 +184,22 @@ type Swap @entity {
 
   # derived info
   amountUSD: BigDecimal!
+
+  token0: Token!
+  token1: Token!
 }
 
-type PancakeDayData @entity {
+type YokaiDayData @entity {
   id: ID! # timestamp rounded to current day by dividing by 86400
 
   date: Int!
 
-  dailyVolumeBNB: BigDecimal!
+  dailyVolumeNative: BigDecimal!
   dailyVolumeUSD: BigDecimal!
   dailyVolumeUntracked: BigDecimal!
 
-  totalVolumeBNB: BigDecimal!
-  totalLiquidityBNB: BigDecimal!
+  totalVolumeNative: BigDecimal!
+  totalLiquidityNative: BigDecimal!
   totalVolumeUSD: BigDecimal! # Accumulate at each trade, not just calculated off whatever totalVolume is. making it more accurate as it is a live conversion
   totalLiquidityUSD: BigDecimal!
 
@@ -253,13 +262,13 @@ type TokenDayData @entity {
 
   # volume stats
   dailyVolumeToken: BigDecimal!
-  dailyVolumeBNB: BigDecimal!
+  dailyVolumeNative: BigDecimal!
   dailyVolumeUSD: BigDecimal!
   dailyTxns: BigInt!
 
   # liquidity stats
   totalLiquidityToken: BigDecimal!
-  totalLiquidityBNB: BigDecimal!
+  totalLiquidityNative: BigDecimal!
   totalLiquidityUSD: BigDecimal!
 
   # price stats

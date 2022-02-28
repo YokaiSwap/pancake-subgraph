@@ -1,5 +1,5 @@
 /* eslint-disable prefer-const */
-import { PancakeFactory, Pair, Token, Bundle } from "../generated/schema";
+import { YokaiFactory, Pair, Token, Bundle } from "../generated/schema";
 import { Pair as PairTemplate } from "../generated/templates";
 import { PairCreated } from "../generated/Factory/Factory";
 import {
@@ -13,35 +13,29 @@ import {
 } from "./utils";
 
 export function handlePairCreated(event: PairCreated): void {
-  let factory = PancakeFactory.load(FACTORY_ADDRESS);
+  let factory = YokaiFactory.load(FACTORY_ADDRESS);
   if (factory === null) {
-    factory = new PancakeFactory(FACTORY_ADDRESS);
+    factory = new YokaiFactory(FACTORY_ADDRESS);
     factory.totalPairs = ZERO_BI;
     factory.totalTransactions = ZERO_BI;
-    factory.totalVolumeBNB = ZERO_BD;
-    factory.totalLiquidityBNB = ZERO_BD;
+    factory.totalVolumeNative = ZERO_BD;
+    factory.totalLiquidityNative = ZERO_BD;
     factory.totalVolumeUSD = ZERO_BD;
     factory.untrackedVolumeUSD = ZERO_BD;
     factory.totalLiquidityUSD = ZERO_BD;
 
     let bundle = new Bundle("1");
-    bundle.bnbPrice = ZERO_BD;
+    bundle.nativeTokenPrice = ZERO_BD;
     bundle.save();
   }
-  factory.totalPairs = factory.totalPairs.plus(ONE_BI);
-  factory.save();
 
   let token0 = Token.load(event.params.token0.toHex());
   if (token0 === null) {
     token0 = new Token(event.params.token0.toHex());
     token0.name = fetchTokenName(event.params.token0);
     token0.symbol = fetchTokenSymbol(event.params.token0);
-    let decimals = fetchTokenDecimals(event.params.token0);
-    if (decimals === null) {
-      return;
-    }
-    token0.decimals = decimals;
-    token0.derivedBNB = ZERO_BD;
+    token0.decimals = fetchTokenDecimals(event.params.token0);
+    token0.derivedNative = ZERO_BD;
     token0.derivedUSD = ZERO_BD;
     token0.tradeVolume = ZERO_BD;
     token0.tradeVolumeUSD = ZERO_BD;
@@ -56,12 +50,8 @@ export function handlePairCreated(event: PairCreated): void {
     token1 = new Token(event.params.token1.toHex());
     token1.name = fetchTokenName(event.params.token1);
     token1.symbol = fetchTokenSymbol(event.params.token1);
-    let decimals = fetchTokenDecimals(event.params.token1);
-    if (decimals === null) {
-      return;
-    }
-    token1.decimals = decimals;
-    token1.derivedBNB = ZERO_BD;
+    token1.decimals = fetchTokenDecimals(event.params.token1);
+    token1.derivedNative = ZERO_BD;
     token1.derivedUSD = ZERO_BD;
     token1.tradeVolume = ZERO_BD;
     token1.tradeVolumeUSD = ZERO_BD;
@@ -78,8 +68,8 @@ export function handlePairCreated(event: PairCreated): void {
   pair.totalTransactions = ZERO_BI;
   pair.reserve0 = ZERO_BD;
   pair.reserve1 = ZERO_BD;
-  pair.trackedReserveBNB = ZERO_BD;
-  pair.reserveBNB = ZERO_BD;
+  pair.trackedReserveNative = ZERO_BD;
+  pair.reserveNative = ZERO_BD;
   pair.reserveUSD = ZERO_BD;
   pair.totalSupply = ZERO_BD;
   pair.volumeToken0 = ZERO_BD;
@@ -91,6 +81,9 @@ export function handlePairCreated(event: PairCreated): void {
   pair.block = event.block.number;
   pair.timestamp = event.block.timestamp;
   pair.save();
+
+  factory.totalPairs = factory.totalPairs.plus(ONE_BI);
+  factory.save();
 
   PairTemplate.create(event.params.pair);
 }

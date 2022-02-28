@@ -4,7 +4,7 @@ import { ERC20 } from "../../generated/SmartChefFactory/ERC20";
 import { ERC20NameBytes } from "../../generated/SmartChefFactory/ERC20NameBytes";
 import { ERC20SymbolBytes } from "../../generated/SmartChefFactory/ERC20SymbolBytes";
 
-export function isNullBnbValue(value: string): boolean {
+export function isNullValue(value: string): boolean {
   return value == "0x0000000000000000000000000000000000000000000000000000000000000001";
 }
 
@@ -17,7 +17,7 @@ export function fetchTokenName(tokenAddress: Address): string {
   if (nameResult.reverted) {
     let nameResultBytes = contractNameBytes.try_name();
     if (!nameResultBytes.reverted) {
-      if (!isNullBnbValue(nameResultBytes.value.toHex())) {
+      if (!isNullValue(nameResultBytes.value.toHex())) {
         nameValue = nameResultBytes.value.toString();
       }
     }
@@ -37,7 +37,7 @@ export function fetchTokenSymbol(tokenAddress: Address): string {
   if (symbolResult.reverted) {
     let symbolResultBytes = contractSymbolBytes.try_symbol();
     if (!symbolResultBytes.reverted) {
-      if (!isNullBnbValue(symbolResultBytes.value.toHex())) {
+      if (!isNullValue(symbolResultBytes.value.toHex())) {
         symbolValue = symbolResultBytes.value.toString();
       }
     }
